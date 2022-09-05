@@ -10,7 +10,6 @@ describe('pgsql-parser and ast interact as expected', () => {
     `;
     const parsed = pgsql.parse(q);
     for (let n of traverse(parsed[0].RawStmt)) {
-      console.log(n);
       assert(PgAst.isNodeType(n.type));
     }
   });
