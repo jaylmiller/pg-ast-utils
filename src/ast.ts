@@ -11,9 +11,7 @@ import assert from 'assert';
  * ```
  * @param node ast node
  */
-export function* traverse(
-  node: PgAst.AstNode['node']
-): Generator<PgAst.AstNode> {
+export function* traverse(node: PgAst.AstNodeType): Generator<PgAst.AstNode> {
   for (let [key, value] of Object.entries(node)) {
     if (Array.isArray(value)) for (let v of value) yield* traverse(v);
     else if (PgAst.isNodeType(key) && value) {
@@ -24,11 +22,13 @@ export function* traverse(
   }
 }
 
+export function createNode<T extends PgAst.AstNodeTypeName>(t: T, n) {}
 export namespace PgAst {
   type Int = number & {__int__: void};
   export interface Statement {
     RawStmt: RawStmt;
   }
+
   export interface RawStmt {
     stmt: {
       CreateSchemaStmt?: CreateSchemaStmt;
@@ -120,6 +120,8 @@ export namespace PgAst {
     };
     stmt_len: Int;
   }
+
+  type Stmt = RawStmt['stmt'];
 
   interface CreateSchemaStmt {
     schemaname: string;
@@ -1117,13 +1119,14 @@ export namespace PgAst {
     typeName: any;
   }
 
-  export function isNodeType(v: string): v is AstNodeType {
-    return AST_TYPES.includes(v as AstNodeType);
+  export function isNodeType(v: string): v is AstNodeTypeName {
+    return AST_TYPES.includes(v as AstNodeTypeName);
   }
 
-  export type AstNodeType = AstNode['type'];
+  export type AstNodeTypeName = AstNode['type'];
+  export type AstNodeType = AstNode['node'];
 
-  export const AST_TYPES: AstNodeType[] = [
+  export const AST_TYPES: AstNodeTypeName[] = [
     'CreateSchemaStmt',
     'CreateStmt',
     'RangeVar',
@@ -1422,4 +1425,6 @@ export namespace PgAst {
     | {type: 'AlterTSConfigurationStmt'; node: AlterTSConfigurationStmt}
     | {type: 'XmlExpr'; node: XmlExpr}
     | {type: 'XmlSerialize'; node: XmlSerialize};
+
+  // export type NodeForTypeName<T extends AstNodeTypeName> = {[K['type'] in AstNode]: }
 }

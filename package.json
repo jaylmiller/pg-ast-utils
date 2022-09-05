@@ -15,7 +15,8 @@
 		"ast"
 	],
 	"dependencies": {
-		"pgsql-parser": "^13.3.13"
+		"pgsql-parser": "^13.3.13",
+		"ts-morph": "^16.0.0"
 	},
 	"devDependencies": {
 		"@types/mocha": "^9.1.1",

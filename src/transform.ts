@@ -1,4 +1,13 @@
 import * as pgsql from 'pgsql-parser';
+import {traverse, PgAst} from './ast';
+export function addRowCountColumn(query: string, newColName: string) {}
+
+// handle signle node for addRowCountColumn func
+function _rowCountHandleNode(node: PgAst.Statement) {
+  // only selects
+  const select = node.RawStmt.stmt.SelectStmt;
+  if (!select) throw new Error('only accepts select statements');
+}
 
 /**
  * create a "normalized" (consistent casing, comments) version of a query

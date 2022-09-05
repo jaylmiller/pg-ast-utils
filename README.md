@@ -16,8 +16,8 @@ npm i pg-ast-utils
 
 ### `traverse`
 
-Returns a generator function iterating over the nodes of an AST.
-Takes a node returned by `pgsql-parser`'s `parse` func as input.
+Takes an AST node returned by `pgsql-parser`'s `parse` func and returns an iterator over
+all of its descendants.
 
 ```ts
 // parse is just a re-exported, typed version of pgsql-parser's parse
@@ -40,6 +40,16 @@ a
 b
 c
 ```
+
+Traversing the AST yields objects with the shape
+`{type: AstNodeTypeName; node: AstNodeType}`
+where `type` is the name of the type of node it is and `node` contains the actual data
+within the node. **The typings for the AST nodes are a work in progress and contain
+alot of `any` at the moment, but they should include all possible fields in the given
+node**. AST typings are defined in the namespace `PgAst` (in `src/ast.ts`).
+
+Objects in the `node` field are references to the AST, so you can modify the AST
+by simply writing to the object in `node`.
 
 ## Analyze
 
