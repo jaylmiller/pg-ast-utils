@@ -2,7 +2,7 @@
 	"author": "Jay Miller",
 	"license": "MIT",
 	"name": "pg-ast-utils",
-	"version": "0.1.3",
+	"version": "0.2.0",
 	"main": "dist/index.js",
 	"types": "dist/index.d.ts",
 	"scripts": {
@@ -15,8 +15,7 @@
 		"ast"
 	],
 	"dependencies": {
-		"pgsql-parser": "^13.3.13",
-		"ts-morph": "^16.0.0"
+		"pgsql-parser": "^13.3.13"
 	},
 	"devDependencies": {
 		"@types/mocha": "^9.1.1",

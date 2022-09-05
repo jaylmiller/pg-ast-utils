@@ -45,9 +45,13 @@ c
 Traversing the AST yields objects with the shape
 `{type: AstNodeTypeName; node: AstNodeType}`
 where `type` is the name of the type of node it is and `node` contains the actual data
-within the node. **The typings for the AST nodes are a work in progress and contain
-alot of `any` at the moment, but they should include all possible fields in the given
-node**. AST typings are defined in the namespace `PgAst` (in `src/ast.ts`).
+within the node.
+
+**The typings for the AST nodes are a work in progress and contain
+alot of `any` at the moment, but, for each node type, the properties define
+account for every possible field in that node type**.
+
+AST typings are defined in the namespace `PgAst` (in `src/ast.ts`).
 
 Objects in the `node` field are references to the AST, so you can modify the AST
 by simply writing to the object in `node`.

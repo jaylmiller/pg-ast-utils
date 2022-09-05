@@ -58,7 +58,11 @@ function _queryCountRowsHandler(
  * ```
  *  and
  * ```ts
- * addRowCountColumn(`with b as (select * from c) select * from b`, '_count_col', '_cte')
+ * addRowCountColumn(`
+ *   with b as (select * from c)
+ *   select * from b`,
+ *   '_count_col',
+ *   '_cte')
  * ```
  * would generate:
  * ```sql
