@@ -1,96 +1,154 @@
 import assert from 'assert';
-import {normalize, normalizeAsync, addRowCountColumn} from '../src';
+import {
+  normalize,
+  normalizeAsync,
+  addRowCountColumn,
+  queryCountRows
+} from '../src';
 
-describe('transform functions', () => {
-  describe('addRowCountColumn', () => {
-    const addedCol = '_testy_col';
-    const cteName = '_cte_name';
-    [
-      {
-        query: 'select 1',
-        name: 'Simple query no CTEs',
-        expected: `
-          with _cte_name as (select 1) 
-          select 
-            *,
-            count(*) OVER () AS _testy_col
-          FROM _cte_name
-        `
-      },
-      {
-        query: `
-        WITH a AS (SELECT asdf
-          FROM t NATURAL JOIN b),
-        a1 AS (SELECT 12)
-        SELECT a.*, a1.*, 99
-        FROM a
-                JOIN b ON a.asdf = b.id
+const testCases = [
+  {
+    query: 'select 1',
+    name: 'Simple query no CTEs',
+    queryCountRowsExpected: `
+        with _cte_name as (select 1) 
+        select 
+          count(*) as _testy_col
+        FROM _cte_name
         `,
-        name: 'with clause multiple CTEs',
-        expected: `
-        WITH a AS (SELECT asdf
-          FROM t NATURAL JOIN b),
-        a1 AS (SELECT 12),
-        _cte_name as (
-          SELECT a.*, a1.*, 99
-          FROM a
-                  JOIN b ON a.asdf = b.id
-        )
+    addRowCountColExpected: `
+        with _cte_name as (select 1) 
         select 
           *,
           count(*) OVER () AS _testy_col
-          
         FROM _cte_name
-        `
-      },
-      {
-        query: `
-        WITH a AS (SELECT asdf
-          FROM t NATURAL JOIN b),
-        a1 AS (SELECT 12)
+      `
+  },
+  {
+    query: `
+      WITH a AS (SELECT asdf
+        FROM t NATURAL JOIN b),
+      a1 AS (SELECT 12)
+      SELECT a.*, a1.*, 99
+      FROM a
+              JOIN b ON a.asdf = b.id
+      `,
+    name: 'with clause multiple CTEs',
+    queryCountRowsExpected: `
+    WITH a AS (SELECT asdf
+      FROM t NATURAL JOIN b),
+    a1 AS (SELECT 12),
+    _cte_name as (
+      SELECT a.*, a1.*, 99
+      FROM a
+              JOIN b ON a.asdf = b.id
+    )
+    select 
+      count(*) AS _testy_col
+    FROM _cte_name
+    
+    `,
+    addRowCountColExpected: `
+      WITH a AS (SELECT asdf
+        FROM t NATURAL JOIN b),
+      a1 AS (SELECT 12),
+      _cte_name as (
+        SELECT a.*, a1.*, 99
+        FROM a
+                JOIN b ON a.asdf = b.id
+      )
+      select 
+        *,
+        count(*) OVER () AS _testy_col
+        
+      FROM _cte_name
+      `
+  },
+  {
+    query: `
+      WITH a AS (SELECT asdf
+        FROM t NATURAL JOIN b),
+      a1 AS (SELECT 12)
+      SELECT a.asdf
+      FROM a
+              JOIN b ON a.asdf = b.id
+      group by a.asdf
+      having count(*) > 1
+      `,
+    name: 'multiple CTEs and having clause in base query',
+    queryCountRowsExpected: `
+    WITH a AS (SELECT asdf
+      FROM t NATURAL JOIN b),
+    a1 AS (SELECT 12),
+    _cte_name as (
+      SELECT a.asdf
+      FROM a
+              JOIN b ON a.asdf = b.id
+      group by a.asdf
+      having count(*) > 1
+    )
+    select 
+      count(*) AS _testy_col
+    FROM _cte_name
+    `,
+    addRowCountColExpected: `
+      WITH a AS (SELECT asdf
+        FROM t NATURAL JOIN b),
+      a1 AS (SELECT 12),
+      _cte_name as (
         SELECT a.asdf
         FROM a
                 JOIN b ON a.asdf = b.id
         group by a.asdf
         having count(*) > 1
-        `,
-        name: 'multiple CTEs and having clause in base query',
-        expected: `
-        WITH a AS (SELECT asdf
-          FROM t NATURAL JOIN b),
-        a1 AS (SELECT 12),
-        _cte_name as (
-          SELECT a.asdf
-          FROM a
-                  JOIN b ON a.asdf = b.id
-          group by a.asdf
-          having count(*) > 1
-        )
+      )
+      select 
+        *,
+        count(*) OVER () AS _testy_col
+      FROM _cte_name
+      `
+  },
+  {
+    query: `select * from a order by b limit 5`,
+    name: `root select has order and limit`,
+    queryCountRowsExpected: `
+    with _cte_name as (select * from a order by b limit 5)
+    select 
+      count(*) AS _testy_col
+    FROM _cte_name
+   `,
+    addRowCountColExpected: `
+        with _cte_name as (select * from a order by b limit 5)
         select 
           *,
           count(*) OVER () AS _testy_col
         FROM _cte_name
-        `
-      },
-      {
-        query: `select * from a order by b limit 5`,
-        name: `root select has order and limit`,
-        expected: `
-          with _cte_name as (select * from a order by b limit 5)
-          select 
-            *,
-            count(*) OVER () AS _testy_col
-          FROM _cte_name
-         `
-      }
-    ].forEach(c => {
-      it(c.name, async () => {
-        const res = addRowCountColumn(c.query, addedCol, cteName);
-        assert.equal(res, normalize(c.expected));
+       `
+  }
+];
+
+const addedCol = '_testy_col';
+const cteName = '_cte_name';
+describe('transform functions', () => {
+  describe('queryCountRows', () => {
+    testCases.forEach(c => {
+      it(c.name, () => {
+        const res = queryCountRows(c.query, addedCol, cteName);
+        assert.equal(res, normalize(c.queryCountRowsExpected));
         return;
       });
     });
   });
+  describe('addRowCountColumn', () => {
+    testCases.forEach(c => {
+      it(c.name, async () => {
+        const res = addRowCountColumn(c.query, addedCol, cteName);
+        assert.equal(res, normalize(c.addRowCountColExpected));
+        return;
+      });
+    });
+  });
+
   for (let testAsync of [false, true]) {
     describe(`normalize${testAsync ? 'Sync' : ''}`, () => {
       [

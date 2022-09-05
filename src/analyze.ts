@@ -31,7 +31,7 @@ export async function tablesQueriedAsync(query: string): Promise<Table[][]> {
   return stmts.map(s => _tablesQueriedHandleNode(s.node));
 }
 
-function _tablesQueriedHandleNode(root: PgAst.TraversedNode['node']): Table[] {
+function _tablesQueriedHandleNode(root: PgAst.AstNodeType): Table[] {
   // get all the ctes first since ctes so they dont get included in the output
   const cteNames = new Set<string>();
   for (let n of traverse(root)) {

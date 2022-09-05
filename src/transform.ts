@@ -1,20 +1,42 @@
 import assert from 'assert';
-import {randomBytes} from 'crypto';
 import * as pgsql from 'pgsql-parser';
-import {createNode, PgAst} from './ast';
+import {copyNode, createNode, PgAst} from './ast';
 
 /**
- * Transform select statement(s) into query that returns the total number of rows in
- * that the initial query returns. This is done by pushing the inital query up into
+ * Transform select statement(s) into query that returns the total number of rows
+ * the initial query returns. This is done by pushing the inital query up into
  * a CTE and then doing a `select count(*)` from it
- * @param query
- * @param _cteName
+ * @param query select statement(s) to be transformed
+ * @param columnName the name of the (only) column in the results, containing the row count
+ * @param _cteName name of the cte created
  */
-export function rowCountQuery(query: string, _cteName = '__cte__') {
-  const transformed = pgsql.parse(query).map(p => {
-    // added column will be deleted
-    const newQuery = _rowCountHandleNode(p, `__delete`, _cteName);
-  });
+export function queryCountRows(
+  query: string,
+  columnName: string,
+  _cteName = '__cte__'
+) {
+  return pgsql.deparse(
+    pgsql.parse(query).map(p => _queryCountRowsHandler(p, columnName, _cteName))
+  );
+}
+
+function _queryCountRowsHandler(
+  node: PgAst.Statement,
+  col: string,
+  cte: string
+) {
+  const newNode = _moveRootSelectToCTE(node, cte);
+  assert(newNode.RawStmt.stmt.SelectStmt, 'got unexpected node type');
+  newNode.RawStmt.stmt.SelectStmt.targetList = [
+    createNode('ResTarget', {
+      name: col,
+      val: createNode('FuncCall', {
+        funcname: [createNode('String', {str: 'count'})],
+        agg_star: true
+      })
+    })
+  ];
+  return newNode;
 }
 
 /**
@@ -60,46 +82,53 @@ export function addRowCountColumn(
 ): string {
   const parsed = pgsql.parse(query);
   return pgsql.deparse(
-    parsed.map(p => _rowCountHandleNode(p, addedColName, _cteName))
+    parsed.map(p => _addCountColNodeHandler(p, addedColName, _cteName))
   );
 }
 
 // handle signle node for addRowCountColumn func
-function _rowCountHandleNode(
+function _addCountColNodeHandler(
   node: PgAst.Statement,
   addedColName: string,
   _cteName: string
 ) {
-  // only selects
-  const select = node.RawStmt.stmt.SelectStmt;
-  if (!select) throw new Error('only accepts select statements');
-  // create copy of the original query with CTEs removed (will move the base query
-  // into a CTE that comes after the CTEs defined in the initial statement, so it
-  // will still have references to those CTEs in the resulting query)
-  const origQuery: PgAst.TypeToAstNode<'SelectStmt'> = JSON.parse(
-    JSON.stringify(node.RawStmt.stmt)
-  );
-  delete origQuery.SelectStmt.withClause;
-
-  // node representing a selection column of `COUNT(*) OVER () as {addedColName}`
-  const countOverNode = createNode('ResTarget', {
-    name: addedColName,
-    val: createNode('FuncCall', {
-      funcname: [createNode('String', {str: 'count'})],
-      agg_star: true,
-      over: createNode('WindowDef', {
-        frameOptions: 1058
-      })
-    })
-  });
-  // selection targets for new query
-  const newTargets = [
+  const newNode = _moveRootSelectToCTE(node, _cteName);
+  assert(newNode.RawStmt.stmt.SelectStmt, 'got unexpected node type');
+  newNode.RawStmt.stmt.SelectStmt.targetList = [
     createNode('ResTarget', {
       val: createNode('ColumnRef', {fields: [createNode('A_Star', {})]})
     }),
-    countOverNode
+    // node representing a selection column of `COUNT(*) OVER () as {addedColName}`
+    createNode('ResTarget', {
+      name: addedColName,
+      val: createNode('FuncCall', {
+        funcname: [createNode('String', {str: 'count'})],
+        agg_star: true,
+        over: createNode('WindowDef', {
+          frameOptions: 1058
+        })
+      })
+    })
   ];
-  // all the CTEs in the new query... this will include existing ctes and then
+  return newNode;
+}
+
+/**
+ * returns a node where the root select stmt is moved up into a CTE.
+ * the target clause is empty so any functions using this must fill them in
+ */
+function _moveRootSelectToCTE(node: PgAst.Statement, cteName: string) {
+  node = copyNode(node);
+  if (!node.RawStmt.stmt.SelectStmt)
+    throw new Error('only accepts select statements');
+  const select = node.RawStmt.stmt.SelectStmt;
+  // create copy of the original query with CTEs removed (will move the base query
+  // into a CTE that comes after the CTEs defined in the initial statement, so it
+  // will still have references to those CTEs in the resulting query)
+  const origQuery = copyNode(node.RawStmt.stmt);
+  assert(origQuery.SelectStmt);
+  delete origQuery.SelectStmt.withClause;
+  // construct array of all the CTEs in the new query... this will include existing ctes and then
   // the new one we create for the existing select
   const ctesForNewQuery = [] as PgAst.TypeToAstNode<'CommonTableExpr'>[];
   if (select.withClause) {
@@ -122,30 +151,24 @@ function _rowCountHandleNode(
   // create a CTE from original base query
   ctesForNewQuery.push(
     createNode('CommonTableExpr', {
-      ctename: _cteName,
+      ctename: cteName,
       ctequery: origQuery
     })
   );
   node.RawStmt.stmt = createNode('SelectStmt', {
-    // todo: Recursive ctes
     withClause: {ctes: ctesForNewQuery, recursive: false},
-    targetList: newTargets,
     op: 'SETOP_NONE',
     fromClause: [
       // from clause is simply the last cte we created (using the original base query)
       createNode('RangeVar', {
-        relname: _cteName,
+        relname: cteName,
         inh: true,
         relpersistence: 'p'
       })
     ]
   });
-  return node;
-}
 
-function _moveRootSelectToCTE(node: PgAst.Statement) {
-  const select = node.RawStmt.stmt.SelectStmt;
-  if (!select) throw new Error('only accepts select statements');
+  return node;
 }
 
 /**

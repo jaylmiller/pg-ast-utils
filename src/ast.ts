@@ -36,6 +36,12 @@ export function createNode<T extends PgAst.AstNodeTypeName>(
     [t]: n
   };
 }
+
+export function copyNode<T extends PgAst.AstNodeType>(o: T): T {
+  // every field in nodes are json serializable
+  return JSON.parse(JSON.stringify(o));
+}
+
 export namespace PgAst {
   type Int = number; // & {__int__: void};
   export interface Statement {
