@@ -2,7 +2,8 @@
 
 This package provides some typing and common utilities for working with Postgres
 ASTs returned by [pgsql-parser](https://github.com/pyramation/pgsql-parser)--which uses
-the real Postgres parser.
+the real Postgres parser. Transformations leverage the,
+`Deparser` provided by [pgsql-parser](https://github.com/pyramation/pgsql-parser)
 
 Install with:
 
@@ -70,6 +71,49 @@ tablesQueried('select * from ns.a join c; select * from ns.b');
 ```
 
 ## Transform
+
+### `addRowCountColumn`
+
+This transformation can be useful when building an API that accepts queries
+written by end users and you want to paginate the results.
+
+`addRowCountColumn` transform select statement(s) by adding to its result
+an additional column that contains the total number of rows that the query returned.
+This is done by moving the root select statement up into a CTE and then making
+the root SelectStmt select all columns from that CTE and do a COUNT OVER window fn to get the total row count of the CTE that the select statement was moved into.
+
+For example:
+
+```ts
+addRowCountColumn(`select * from a`, '_count_col', '_cte');
+```
+
+would result in a sql query like:
+
+```sql
+with _cte as (select * from a)
+select *, COUNT(*) OVER () as _count_col
+from _cte
+```
+
+and
+
+```ts
+addRowCountColumn(
+  `with b as (select * from c) select * from b`,
+  '_count_col',
+  '_cte'
+);
+```
+
+would generate this:
+
+```sql
+with b as (select * from c),
+_cte as (select * from b)
+select *, COUNT(*) OVER () as _count_col
+from _cte
+```
 
 ### `normalize`
 

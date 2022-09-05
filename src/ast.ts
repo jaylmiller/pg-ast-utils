@@ -23,42 +23,64 @@ export function* traverse(
     } else if (typeof value === 'object') yield* traverse(value);
   }
 }
-
-// export function createNode<T extends PgAst.AstNodeTypeName>(t: T, n) {}
+/**
+ * return node in the foramt expected by pgsql-parser for deparsing
+ * @param t
+ * @param n
+ */
+export function createNode<T extends PgAst.AstNodeTypeName>(
+  t: T,
+  n: Partial<PgAst.AstNodes[T]>
+): PgAst.TypeToAstNode<T> {
+  return {
+    [t]: n
+  };
+}
 export namespace PgAst {
-  type Int = number & {__int__: void};
+  type Int = number; // & {__int__: void};
   export interface Statement {
     RawStmt: RawStmt;
   }
-
+  export type AstNodeTypeName = keyof AstNodes;
+  export type AstNodeType = AstNodes[AstNodeTypeName];
   export type TraversedNode = {
-    [K in keyof AllNodes]: {type: K; node: AllNodes[K]};
-  }[keyof AllNodes];
+    [K in keyof AstNodes]: {type: K; node: AstNodes[K]};
+  }[keyof AstNodes];
+  export type TypeToAstNode<T extends AstNodeTypeName> = {
+    [K in keyof AstNodes as K extends T ? K : never]: Partial<AstNodes[K]>;
+  };
+
   type Stmt = {
-    [K in keyof AllNodes as K extends `${string}Stmt`
-      ? K
-      : never]?: AllNodes[K];
+    [K in keyof AstNodes as K extends `${string}Stmt` ? K : never]?: Partial<
+      AstNodes[K]
+    >;
   };
   export interface RawStmt {
     stmt: Stmt;
-    stmt_len: Int;
+    stmt_len?: Int;
   }
-
+  export function getNodeType(n: any) {
+    const ks = Object.keys(n);
+    if (ks.length !== 1) return null;
+    const k = ks[0];
+    if (!isNodeType(k)) return null;
+    return k;
+  }
   enum A_Expr_Kind {
-    AEXPR_OP /* normal operator */,
-    AEXPR_OP_ANY /* scalar op ANY (array) */,
-    AEXPR_OP_ALL /* scalar op ALL (array) */,
-    AEXPR_DISTINCT /* IS DISTINCT FROM - name must be "=" */,
-    AEXPR_NOT_DISTINCT /* IS NOT DISTINCT FROM - name must be "=" */,
-    AEXPR_NULLIF /* NULLIF - name must be "=" */,
-    AEXPR_IN /* [NOT] IN - name must be "=" or "<>" */,
-    AEXPR_LIKE /* [NOT] LIKE - name must be "~~" or "!~~" */,
-    AEXPR_ILIKE /* [NOT] ILIKE - name must be "~~*" or "!~~*" */,
-    AEXPR_SIMILAR /* [NOT] SIMILAR - name must be "~" or "!~" */,
-    AEXPR_BETWEEN /* name must be "BETWEEN" */,
-    AEXPR_NOT_BETWEEN /* name must be "NOT BETWEEN" */,
-    AEXPR_BETWEEN_SYM /* name must be "BETWEEN SYMMETRIC" */,
-    AEXPR_NOT_BETWEEN_SYM /* name must be "NOT BETWEEN SYMMETRIC" */
+    AEXPR_OP,
+    AEXPR_OP_ANY,
+    AEXPR_OP_ALL,
+    AEXPR_DISTINCT,
+    AEXPR_NOT_DISTINCT,
+    AEXPR_NULLIF,
+    AEXPR_IN,
+    AEXPR_LIKE,
+    AEXPR_ILIKE,
+    AEXPR_SIMILAR,
+    AEXPR_BETWEEN,
+    AEXPR_NOT_BETWEEN,
+    AEXPR_BETWEEN_SYM,
+    AEXPR_NOT_BETWEEN_SYM
   }
 
   enum TransactionStmtKind {
@@ -77,9 +99,29 @@ export namespace PgAst {
   export function isNodeType(v: string): v is AstNodeTypeName {
     return AST_TYPES.includes(v as AstNodeTypeName);
   }
-
-  type AllNodes = {
+  // https://doxygen.postgresql.org/parsenodes_8h_source.html
+  export type AstNodes = {
     Statement: {RawStmt: RawStmt};
+    SelectStmt: {
+      targetList: any[];
+      fromClause: any[];
+      groupClause: any[];
+      havingClause: any;
+      op: 'SETOP_NONE' | 'SETOP_UNION' | 'SETOP_INTERSECT' | 'SETOP_EXCEPT';
+      sortClause: any[];
+      whereClause: any;
+      distinctClause: any[];
+      limitCount: any;
+      valuesLists: object[][];
+      intoClause: any;
+      all: boolean;
+      larg: any;
+      rarg: any;
+      limitOffset: any;
+      withClause: AstNodes['WithClause'];
+      lockingClause: any[];
+      windowClause: any[];
+    };
     CreateSchemaStmt: {
       schemaname: string;
       if_not_exists: boolean;
@@ -200,26 +242,7 @@ export namespace PgAst {
     RoleSpec: {roletype: Int; rolename: string};
     CommentStmt: {objtype: Int; object: any[]; comment: string};
     ObjectWithArgs: {objname: any[]; objargs: any[]; args_unspecified: boolean};
-    SelectStmt: {
-      targetList: any[];
-      fromClause: any[];
-      groupClause: any[];
-      havingClause: any;
-      op: Int;
-      sortClause: any[];
-      whereClause: any;
-      distinctClause: any[];
-      limitCount: any;
-      valuesLists: object[][];
-      intoClause: any;
-      all: boolean;
-      larg: any;
-      rarg: any;
-      limitOffset: any;
-      withClause: any;
-      lockingClause: any[];
-      windowClause: any[];
-    };
+
     ResTarget: {val: any; name: string; indirection: any[]};
     Alias: {aliasname: string; colnames: any[]};
     JoinExpr: {
@@ -594,9 +617,6 @@ export namespace PgAst {
     };
     XmlSerialize: {xmloption: Int; expr: any; typeName: any};
   };
-
-  export type AstNodeTypeName = keyof AllNodes;
-  export type AstNodeType = AllNodes[AstNodeTypeName];
 
   export const AST_TYPES: AstNodeTypeName[] = [
     'CreateSchemaStmt',
