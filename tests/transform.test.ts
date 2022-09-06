@@ -124,6 +124,32 @@ const testCases = [
           count(*) OVER () AS _testy_col
         FROM _cte_name
        `
+  },
+  {
+    query: 'select 1; select 2;',
+    name: 'multiple statement query',
+    queryCountRowsExpected: `
+        with _cte_name as (select 1) 
+        select 
+          count(*) as _testy_col
+        FROM _cte_name;
+        with _cte_name as (select 2) 
+        select 
+          count(*) as _testy_col
+        FROM _cte_name;
+        `,
+    addRowCountColExpected: `
+        with _cte_name as (select 1) 
+        select 
+          *,
+          count(*) OVER () AS _testy_col
+        FROM _cte_name;
+        with _cte_name as (select 2) 
+        select 
+          *,
+          count(*) OVER () AS _testy_col
+        FROM _cte_name;
+      `
   }
 ];
 

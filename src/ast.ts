@@ -50,7 +50,7 @@ export function copyNode<T extends PgAst.AstNodeType>(node: T): T {
 /**
  * typeguard for {@link PgAst.AstNodeTypeName}
  */
-function _isNodeType(v: string): v is PgAst.AstNodeTypeName {
+export function _isNodeType(v: string): v is PgAst.AstNodeTypeName {
   return PgAst.AST_TYPES.includes(v as PgAst.AstNodeTypeName);
 }
 
