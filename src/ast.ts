@@ -16,7 +16,7 @@ export function* traverse(
 ): Generator<PgAst.TraversedNode> {
   for (let [key, value] of Object.entries(node)) {
     if (Array.isArray(value)) for (let v of value) yield* traverse(v);
-    else if (PgAst.isNodeType(key) && value) {
+    else if (_isNodeType(key) && value) {
       assert(typeof value === 'object');
       yield {type: key, node: value} as PgAst.TraversedNode;
       yield* traverse(value);
@@ -37,9 +37,21 @@ export function createNode<T extends PgAst.AstNodeTypeName>(
   };
 }
 
-export function copyNode<T extends PgAst.AstNodeType>(o: T): T {
+/**
+ * creates deep copy of an AST node
+ * @param node node to copy
+ * @returns copied node
+ */
+export function copyNode<T extends PgAst.AstNodeType>(node: T): T {
   // every field in nodes are json serializable
-  return JSON.parse(JSON.stringify(o));
+  return JSON.parse(JSON.stringify(node));
+}
+
+/**
+ * typeguard for {@link PgAst.AstNodeTypeName}
+ */
+function _isNodeType(v: string): v is PgAst.AstNodeTypeName {
+  return PgAst.AST_TYPES.includes(v as PgAst.AstNodeTypeName);
 }
 
 export namespace PgAst {
@@ -56,23 +68,22 @@ export namespace PgAst {
     [K in keyof AstNodes as K extends T ? K : never]: Partial<AstNodes[K]>;
   };
 
-  type Stmt = {
-    [K in keyof AstNodes as K extends `${string}Stmt` ? K : never]?: Partial<
-      AstNodes[K]
-    >;
-  };
   export interface RawStmt {
-    stmt: Stmt;
+    stmt: {
+      [K in keyof AstNodes as K extends `${string}Stmt` ? K : never]?: Partial<
+        AstNodes[K]
+      >;
+    };
     stmt_len?: Int;
   }
   export function getNodeType(n: any) {
     const ks = Object.keys(n);
     if (ks.length !== 1) return null;
     const k = ks[0];
-    if (!isNodeType(k)) return null;
+    if (!_isNodeType(k)) return null;
     return k;
   }
-  enum A_Expr_Kind {
+  export enum A_Expr_Kind {
     AEXPR_OP,
     AEXPR_OP_ANY,
     AEXPR_OP_ALL,
@@ -89,7 +100,7 @@ export namespace PgAst {
     AEXPR_NOT_BETWEEN_SYM
   }
 
-  enum TransactionStmtKind {
+  export enum TransactionStmtKind {
     TRANS_STMT_BEGIN,
     TRANS_STMT_START,
     TRANS_STMT_COMMIT,
@@ -102,10 +113,7 @@ export namespace PgAst {
     TRANS_STMT_ROLLBACK_PREPARED
   }
 
-  export function isNodeType(v: string): v is AstNodeTypeName {
-    return AST_TYPES.includes(v as AstNodeTypeName);
-  }
-  // https://doxygen.postgresql.org/parsenodes_8h_source.html
+  // https://github.com/postgres/postgres/blob/master/src/include/nodes/parsenodes.h
   export type AstNodes = {
     Statement: {RawStmt: RawStmt};
     SelectStmt: {
