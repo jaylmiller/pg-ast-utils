@@ -1,3 +1,4 @@
+import assert from 'assert';
 import {createHash} from 'crypto';
 import * as pgsql from 'pgsql-parser';
 import {PgAst, traverse} from './ast';
@@ -36,6 +37,7 @@ function _tablesQueriedHandleNode(root: PgAst.AstNodeType): Table[] {
   const cteNames = new Set<string>();
   for (let n of traverse(root)) {
     if (n.type === 'CommonTableExpr') {
+      assert(n.node.ctename);
       cteNames.add(n.node.ctename);
     }
   }
@@ -45,6 +47,7 @@ function _tablesQueriedHandleNode(root: PgAst.AstNodeType): Table[] {
   for (let node of traverse(root)) {
     if (node.type === 'RangeVar') {
       let key = node.node.relname;
+      assert(key);
       const t = {name: node.node.relname} as Table;
       if (node.node.schemaname) {
         t.schema = node.node.schemaname;

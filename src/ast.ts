@@ -14,13 +14,14 @@ import assert from 'assert';
 export function* traverse(
   node: PgAst.AstNodeType
 ): Generator<PgAst.TraversedNode> {
-  for (let [key, value] of Object.entries(node)) {
+  for (let [key, value] of Object.entries(node || {})) {
     if (Array.isArray(value)) for (let v of value) yield* traverse(v);
     else if (_isNodeType(key) && value) {
       assert(typeof value === 'object');
       yield {type: key, node: value} as PgAst.TraversedNode;
       yield* traverse(value);
-    } else if (typeof value === 'object') yield* traverse(value);
+    } else if (typeof value === 'object' && value !== null)
+      yield* traverse(value);
   }
 }
 /**
@@ -30,7 +31,7 @@ export function* traverse(
  */
 export function createNode<T extends PgAst.AstNodeTypeName>(
   t: T,
-  n: Partial<PgAst.AstNodes[T]>
+  n: Partial<PgAst.AllAstNodes[T]>
 ): PgAst.TypeToAstNode<T> {
   return {
     [t]: n
@@ -59,20 +60,22 @@ export namespace PgAst {
   export interface Statement {
     RawStmt: RawStmt;
   }
-  export type AstNodeTypeName = keyof AstNodes;
-  export type AstNodeType = AstNodes[AstNodeTypeName];
+  export type AstNodeTypeName = keyof AllAstNodes;
+  export type AstNodeType = AllAstNodes[AstNodeTypeName];
   export type TraversedNode = {
-    [K in keyof AstNodes]: {type: K; node: AstNodes[K]};
-  }[keyof AstNodes];
+    [K in keyof AllAstNodes]: {type: K; node: AllAstNodes[K]};
+  }[keyof AllAstNodes];
   export type TypeToAstNode<T extends AstNodeTypeName> = {
-    [K in keyof AstNodes as K extends T ? K : never]: Partial<AstNodes[K]>;
+    [K in keyof AllAstNodes as K extends T ? K : never]: Partial<
+      AllAstNodes[K]
+    >;
   };
 
   export interface RawStmt {
     stmt: {
-      [K in keyof AstNodes as K extends `${string}Stmt` ? K : never]?: Partial<
-        AstNodes[K]
-      >;
+      [K in keyof AllAstNodes as K extends `${string}Stmt`
+        ? K
+        : never]?: Partial<AllAstNodes[K]>;
     };
     stmt_len?: Int;
   }
@@ -83,702 +86,1366 @@ export namespace PgAst {
     if (!_isNodeType(k)) return null;
     return k;
   }
-  export enum A_Expr_Kind {
-    AEXPR_OP,
-    AEXPR_OP_ANY,
-    AEXPR_OP_ALL,
-    AEXPR_DISTINCT,
-    AEXPR_NOT_DISTINCT,
-    AEXPR_NULLIF,
-    AEXPR_IN,
-    AEXPR_LIKE,
-    AEXPR_ILIKE,
-    AEXPR_SIMILAR,
-    AEXPR_BETWEEN,
-    AEXPR_NOT_BETWEEN,
-    AEXPR_BETWEEN_SYM,
-    AEXPR_NOT_BETWEEN_SYM
-  }
 
-  export enum TransactionStmtKind {
-    TRANS_STMT_BEGIN,
-    TRANS_STMT_START,
-    TRANS_STMT_COMMIT,
-    TRANS_STMT_ROLLBACK,
-    TRANS_STMT_SAVEPOINT,
-    TRANS_STMT_RELEASE,
-    TRANS_STMT_ROLLBACK_TO,
-    TRANS_STMT_PREPARE,
-    TRANS_STMT_COMMIT_PREPARED,
-    TRANS_STMT_ROLLBACK_PREPARED
-  }
-
-  // https://github.com/postgres/postgres/blob/master/src/include/nodes/parsenodes.h
-  export type AstNodes = {
-    Statement: {RawStmt: RawStmt};
-    SelectStmt: {
-      targetList: any[];
-      fromClause: any[];
-      groupClause: any[];
-      havingClause: any;
-      op: 'SETOP_NONE' | 'SETOP_UNION' | 'SETOP_INTERSECT' | 'SETOP_EXCEPT';
-      sortClause: any[];
-      whereClause: any;
-      distinctClause: any[];
-      limitCount: any;
-      valuesLists: object[][];
-      intoClause: any;
-      all: boolean;
-      larg: any;
-      rarg: any;
-      limitOffset: any;
-      withClause: AstNodes['WithClause'];
-      lockingClause: any[];
-      windowClause: any[];
-    };
-    CreateSchemaStmt: {
-      schemaname: string;
-      if_not_exists: boolean;
-      schemaElts: any[];
-      authrole: any;
-    };
-    CreateStmt: {
-      relation: any;
-      tableElts: any[];
-      oncommit: Int;
-      inhRelations: any[];
-      options: any[];
-      ofTypename: any;
-      if_not_exists: boolean;
-    };
-    RangeVar: {
-      schemaname: string;
-      relname: string;
-      inh: boolean;
-      relpersistence: string;
-      alias: any;
-    };
-    ColumnDef: {
-      colname: string;
-      typeName: any;
-      is_local: boolean;
-      constraints: any[];
-      raw_default: any;
-      collClause: any;
-      fdwoptions: any[];
-    };
-    TypeName: {
-      names: any[];
-      typemod: Int;
-      typmods: any[];
-      setof: boolean;
-      arrayBounds: any[];
-    };
-    String: {str: string};
-    Constraint: {
-      contype: Int;
-      raw_expr: any;
-      conname: string;
-      pktable: any;
-      fk_attrs: any[];
-      pk_attrs: any[];
-      fk_matchtype: string;
-      fk_upd_action: string;
-      fk_del_action: string;
-      initially_valid: boolean;
-      keys: any[];
-      is_no_inherit: boolean;
-      skip_validation: boolean;
-      exclusions: object[][];
-      access_method: string;
-      deferrable: boolean;
-      indexname: string;
-    };
-    A_Const: {val: any};
-    Integer: {ival: Int};
-    AlterTableStmt: {
-      relation: any;
-      cmds: any[];
-      relkind: Int;
-      missing_ok: boolean;
-    };
-    AlterTableCmd: {
-      subtype: Int;
-      behavior: Int;
-      name: string;
-      def: any;
-      missing_ok: boolean;
-      newowner: any;
-    };
-    SQLValueFunction: {op: Int; typmod: Int};
-    RenameStmt: {
-      renameType: Int;
-      relationType: Int;
-      relation: any;
-      subname: string;
-      newname: string;
-      behavior: Int;
-      object: any;
-      missing_ok: boolean;
-    };
-    A_Expr: {kind: A_Expr_Kind; name: any[]; lexpr: any; rexpr: any};
-    TypeCast: {arg: any; typeName: any};
-    ColumnRef: {fields: any[]};
-    FuncCall: {
-      funcname: any[];
-      args: any[];
-      agg_star: boolean;
-      func_variadic: boolean;
-      agg_order: any[];
-      agg_distinct: boolean;
-      agg_filter: any;
-      agg_within_group: boolean;
-      over: any;
-    };
-    AlterDefaultPrivilegesStmt: {options: any[]; action: any};
-    DefElem: {
-      defname: string;
-      arg: any[];
-      defaction: Int;
-      defnamespace: string;
-    };
-    GrantStmt: {
-      is_grant: boolean;
-      targtype: Int;
-      objtype: Int;
-      privileges: any[];
-      grantees: any[];
-      behavior: Int;
-      objects: any[];
-      grant_option: boolean;
-    };
-    AccessPriv: {priv_name: string; cols: any[]};
-    RoleSpec: {roletype: Int; rolename: string};
-    CommentStmt: {objtype: Int; object: any[]; comment: string};
-    ObjectWithArgs: {objname: any[]; objargs: any[]; args_unspecified: boolean};
-
-    ResTarget: {val: any; name: string; indirection: any[]};
-    Alias: {aliasname: string; colnames: any[]};
-    JoinExpr: {
-      jointype: Int;
-      larg: any;
-      rarg: any;
-      quals: any;
-      usingClause: any[];
-      isNatural: boolean;
-      alias: any;
-    };
-    BoolExpr: {boolop: Int; args: any[]};
-    A_Star: {};
-    SortBy: {node: any; sortby_dir: Int; sortby_nulls: Int; useOp: any[]};
-    NamedArgExpr: {arg: any; name: string; argnumber: Int};
-    A_ArrayExpr: {elements: any[]};
-    Float: {str: string};
-    RangeFunction: {
-      is_rowsfrom: boolean;
-      functions: object[][];
-      coldeflist: any[];
-      alias: any;
-      lateral: boolean;
-      ordinality: boolean;
-    };
-    SubLink: {subLinkType: Int; subselect: any; testexpr: any; operName: any[]};
-    Null: {};
-    VariableSetStmt: {kind: Int; name: string; args: any[]; is_local: boolean};
-    VariableShowStmt: {name: string};
-    DoStmt: {args: any[]};
-    CreateDomainStmt: {
-      domainname: any[];
-      typeName: any;
-      constraints: any[];
-      collClause: any;
-    };
-    CreateEnumStmt: {typeName: any[]; vals: any[]};
-    CreateExtensionStmt: {
-      extname: string;
-      options: any[];
-      if_not_exists: boolean;
-    };
-    CreateFunctionStmt: {
-      replace: boolean;
-      funcname: any[];
-      parameters: any[];
-      returnType: any;
-      options: any[];
-    };
-    FunctionParameter: {name: string; argType: any; mode: Int; defexpr: any};
-    TransactionStmt: {kind: TransactionStmtKind; options: any[]; gid: string};
-    IndexStmt: {
-      idxname: string;
-      relation: any;
-      accessMethod: string;
-      indexParams: any[];
-      concurrent: boolean;
-      unique: boolean;
-      whereClause: any;
-      options: any[];
-      if_not_exists: boolean;
-    };
-    IndexElem: {
-      name: string;
-      ordering: Int;
-      nulls_ordering: Int;
-      expr: any;
-      opclass: any[];
-      collation: any[];
-    };
-    NullTest: {arg: any; nulltesttype: Int};
-    ParamRef: {number: Int};
-    CreatePolicyStmt: {
-      policy_name: string;
-      table: any;
-      cmd_name: string;
-      permissive: boolean;
-      roles: any[];
-      qual: any;
-      with_check: any;
-    };
-    RangeSubselect: {subquery: any; alias: any; lateral: boolean};
-    A_Indirection: {arg: any; indirection: any[]};
-    RowExpr: {args: any[]; row_format: Int};
-    CreateRoleStmt: {stmt_type: Int; role: string; options: any[]};
-    GrantRoleStmt: {
-      granted_roles: any[];
-      grantee_roles: any[];
-      is_grant: boolean;
-      behavior: Int;
-      admin_opt: boolean;
-    };
-    RuleStmt: {
-      relation: any;
-      rulename: string;
-      event: Int;
-      instead: boolean;
-      actions: any[];
-      whereClause: any;
-      replace: boolean;
-    };
-    UpdateStmt: {
-      relation: any;
-      targetList: any[];
-      whereClause: any;
-      returningList: any[];
-      fromClause: any[];
-      withClause: any;
-    };
-    DeleteStmt: {
-      relation: any;
-      whereClause: any;
-      usingClause: any[];
-      returningList: any[];
-      withClause: any;
+  type AstNode = Partial<AllAstNodes>;
+  // generated type
+  export interface AllAstNodes {
+    RawStmt: {
+      stmt?: AstNode;
+      stmt_location?: number;
+      stmt_len?: number;
     };
     InsertStmt: {
-      relation: any;
-      selectStmt: any;
-      override: any;
-      cols: any[];
-      onConflictClause: any;
-      returningList: any[];
-      withClause: any;
+      relation?: AllAstNodes['RangeVar'];
+      cols?: AstNode[];
+      selectStmt?: AstNode;
+      onConflictClause?: AllAstNodes['OnConflictClause'];
+      returningList?: AstNode[];
+      withClause?: AllAstNodes['WithClause'];
+      override?: any;
     };
-    CreateSeqStmt: {sequence: any; options: any[]; if_not_exists: boolean};
-    OnConflictClause: {
-      action: Int;
-      infer: any;
-      targetList: any[];
-      whereClause: any;
+    DeleteStmt: {
+      relation?: AllAstNodes['RangeVar'];
+      usingClause?: AstNode[];
+      whereClause?: AstNode;
+      returningList?: AstNode[];
+      withClause?: AllAstNodes['WithClause'];
     };
-    InferClause: {indexElems: any[]; conname: string; whereClause: any};
-    MultiAssignRef: {source: any; colno: Int; ncolumns: Int};
-    SetToDefault: {};
-    MinMaxExpr: {op: Int; args: any[]};
-    DropStmt: {
-      objects: object[][];
-      removeType: Int;
-      behavior: Int;
-      missing_ok: boolean;
-      concurrent: boolean;
+    UpdateStmt: {
+      relation?: AllAstNodes['RangeVar'];
+      targetList?: AstNode[];
+      whereClause?: AstNode;
+      fromClause?: AstNode[];
+      returningList?: AstNode[];
+      withClause?: AllAstNodes['WithClause'];
+    };
+    SelectStmt: {
+      distinctClause?: AstNode[];
+      intoClause?: AllAstNodes['IntoClause'];
+      targetList?: AstNode[];
+      fromClause?: AstNode[];
+      whereClause?: AstNode;
+      groupClause?: AstNode[];
+      havingClause?: AstNode;
+      windowClause?: AstNode[];
+      valuesLists?: AstNode[];
+      sortClause?: AstNode[];
+      limitOffset?: AstNode;
+      limitCount?: AstNode;
+      limitOption?: any;
+      lockingClause?: AstNode[];
+      withClause?: AllAstNodes['WithClause'];
+      op?: any;
+      all?: boolean;
+      larg?: AllAstNodes['SelectStmt'];
+      rarg?: AllAstNodes['SelectStmt'];
+    };
+    SetOperationStmt: {
+      op?: any;
+      all?: boolean;
+      larg?: AstNode;
+      rarg?: AstNode;
+      colTypes?: AstNode[];
+      colTypmods?: AstNode[];
+      colCollations?: AstNode[];
+      groupClauses?: AstNode[];
+    };
+    CreateSchemaStmt: {
+      schemaname?: string;
+      authrole?: AllAstNodes['RoleSpec'];
+      schemaElts?: AstNode[];
+      if_not_exists?: boolean;
+    };
+    AlterTableStmt: {
+      relation?: AllAstNodes['RangeVar'];
+      cmds?: AstNode[];
+      relkind?: any;
+      missing_ok?: boolean;
+    };
+    ReplicaIdentityStmt: {
+      identity_type?: string;
+      name?: string;
+    };
+    AlterCollationStmt: {
+      collname?: AstNode[];
+    };
+    AlterDomainStmt: {
+      subtype?: string;
+      typeName?: AstNode[];
+      name?: string;
+      def?: AstNode;
+      behavior?: any;
+      missing_ok?: boolean;
+    };
+    GrantStmt: {
+      is_grant?: boolean;
+      targtype?: any;
+      objtype?: any;
+      objects?: AstNode[];
+      privileges?: AstNode[];
+      grantees?: AstNode[];
+      grant_option?: boolean;
+      behavior?: any;
+    };
+    GrantRoleStmt: {
+      granted_roles?: AstNode[];
+      grantee_roles?: AstNode[];
+      is_grant?: boolean;
+      admin_opt?: boolean;
+      grantor?: AllAstNodes['RoleSpec'];
+      behavior?: any;
+    };
+    AlterDefaultPrivilegesStmt: {
+      options?: AstNode[];
+      action?: AllAstNodes['GrantStmt'];
+    };
+    CopyStmt: {
+      relation?: AllAstNodes['RangeVar'];
+      query?: AstNode;
+      attlist?: AstNode[];
+      is_from?: boolean;
+      is_program?: boolean;
+      filename?: string;
+      options?: AstNode[];
+      whereClause?: AstNode;
+    };
+    VariableSetStmt: {
+      kind?: any;
+      name?: string;
+      args?: AstNode[];
+      is_local?: boolean;
+    };
+    VariableShowStmt: {
+      name?: string;
+    };
+    CreateStmt: {
+      relation?: AllAstNodes['RangeVar'];
+      tableElts?: AstNode[];
+      inhRelations?: AstNode[];
+      partbound?: any;
+      partspec?: AllAstNodes['PartitionSpec'];
+      ofTypename?: AllAstNodes['TypeName'];
+      constraints?: AstNode[];
+      options?: AstNode[];
+      oncommit?: any;
+      tablespacename?: string;
+      accessMethod?: string;
+      if_not_exists?: boolean;
+    };
+    CreateTableSpaceStmt: {
+      tablespacename?: string;
+      owner?: AllAstNodes['RoleSpec'];
+      location?: string;
+      options?: AstNode[];
+    };
+    DropTableSpaceStmt: {
+      tablespacename?: string;
+      missing_ok?: boolean;
+    };
+    AlterTableSpaceOptionsStmt: {
+      tablespacename?: string;
+      options?: AstNode[];
+      isReset?: boolean;
+    };
+    AlterTableMoveAllStmt: {
+      orig_tablespacename?: string;
+      objtype?: any;
+      roles?: AstNode[];
+      new_tablespacename?: string;
+      nowait?: boolean;
+    };
+    CreateExtensionStmt: {
+      extname?: string;
+      if_not_exists?: boolean;
+      options?: AstNode[];
+    };
+    AlterExtensionStmt: {
+      extname?: string;
+      options?: AstNode[];
+    };
+    AlterExtensionContentsStmt: {
+      extname?: string;
+      action?: number;
+      objtype?: any;
+      object?: AstNode;
+    };
+    CreateFdwStmt: {
+      fdwname?: string;
+      func_options?: AstNode[];
+      options?: AstNode[];
+    };
+    AlterFdwStmt: {
+      fdwname?: string;
+      func_options?: AstNode[];
+      options?: AstNode[];
+    };
+    CreateForeignServerStmt: {
+      servername?: string;
+      servertype?: string;
+      version?: string;
+      fdwname?: string;
+      if_not_exists?: boolean;
+      options?: AstNode[];
+    };
+    AlterForeignServerStmt: {
+      servername?: string;
+      version?: string;
+      options?: AstNode[];
+      has_version?: boolean;
+    };
+    CreateForeignTableStmt: {
+      base?: AllAstNodes['CreateStmt'];
+      servername?: string;
+      options?: AstNode[];
+    };
+    CreateUserMappingStmt: {
+      user?: AllAstNodes['RoleSpec'];
+      servername?: string;
+      if_not_exists?: boolean;
+      options?: AstNode[];
+    };
+    AlterUserMappingStmt: {
+      user?: AllAstNodes['RoleSpec'];
+      servername?: string;
+      options?: AstNode[];
+    };
+    DropUserMappingStmt: {
+      user?: AllAstNodes['RoleSpec'];
+      servername?: string;
+      missing_ok?: boolean;
+    };
+    ImportForeignSchemaStmt: {
+      server_name?: string;
+      remote_schema?: string;
+      local_schema?: string;
+      list_type?: any;
+      table_list?: AstNode[];
+      options?: AstNode[];
+    };
+    CreatePolicyStmt: {
+      policy_name?: string;
+      table?: AllAstNodes['RangeVar'];
+      cmd_name?: string;
+      permissive?: boolean;
+      roles?: AstNode[];
+      qual?: AstNode;
+      with_check?: AstNode;
+    };
+    AlterPolicyStmt: {
+      policy_name?: string;
+      table?: AllAstNodes['RangeVar'];
+      roles?: AstNode[];
+      qual?: AstNode;
+      with_check?: AstNode;
+    };
+    CreateAmStmt: {
+      amname?: string;
+      handler_name?: AstNode[];
+      amtype?: string;
     };
     CreateTrigStmt: {
-      trigname: string;
-      relation: any;
-      funcname: any[];
-      row: boolean;
-      timing: Int;
-      events: Int;
-      args: any[];
-      columns: any[];
-      whenClause: any;
-      transitionRels: any[];
-      isconstraint: boolean;
-      deferrable: boolean;
-      initdeferred: boolean;
-    };
-    CompositeTypeStmt: {typevar: any; coldeflist: any[]};
-    ExplainStmt: {query: any; options: any[]};
-    ViewStmt: {
-      view: any;
-      query: any;
-      withCheckOption: Int;
-      replace: boolean;
-      aliases: any[];
-      options: any[];
-    };
-    CollateClause: {arg: any; collname: any[]};
-    DefineStmt: {
-      kind: Int;
-      defnames: any[];
-      args: object[][];
-      definition: any[];
-      oldstyle: boolean;
-    };
-    DropRoleStmt: {roles: any[]; missing_ok: boolean};
-    AlterOwnerStmt: {objectType: Int; object: any; newowner: any};
-    AlterObjectSchemaStmt: {
-      objectType: Int;
-      object: any;
-      newschema: string;
-      relation: any;
-      missing_ok: boolean;
-    };
-    CreateConversionStmt: {
-      conversion_name: any[];
-      for_encoding_name: string;
-      to_encoding_name: string;
-      func_name: any[];
-      def: boolean;
-    };
-    CreateFdwStmt: {fdwname: string; func_options: any[]; options: any[]};
-    CreateForeignServerStmt: {
-      servername: string;
-      fdwname: string;
-      options: any[];
-      servertype: string;
-      version: string;
-    };
-    CreatePLangStmt: {plname: string; plhandler: any[]};
-    CreateOpFamilyStmt: {opfamilyname: any[]; amname: string};
-    CreateOpClassStmt: {
-      opclassname: any[];
-      amname: string;
-      datatype: any;
-      items: any[];
-      isDefault: boolean;
-    };
-    CreateOpClassItem: {
-      itemtype: Int;
-      storedtype: any;
-      name: any;
-      number: Int;
-      class_args: any[];
-      order_family: any[];
-    };
-    AlterOpFamilyStmt: {
-      opfamilyname: any[];
-      amname: string;
-      items: any[];
-      isDrop: boolean;
-    };
-    AlterOperatorStmt: {opername: any; options: any[]};
-    VacuumStmt: {options: Int; relation: any; va_cols: any[]};
-    CreateTableAsStmt: {
-      query: any;
-      into: any;
-      relkind: Int;
-      if_not_exists: boolean;
-    };
-    IntoClause: {
-      rel: any;
-      onCommit: Int;
-      colNames: any[];
-      skipData: boolean;
-      options: any[];
-    };
-    CaseExpr: {args: any[]; defresult: any; arg: any};
-    CaseWhen: {expr: any; result: any};
-    BooleanTest: {arg: any; booltesttype: Int};
-    AlterFunctionStmt: {func: any; actions: any[]};
-    TruncateStmt: {relations: any[]; behavior: Int; restart_seqs: boolean};
-    A_Indices: {is_slice: boolean; lidx: any; uidx: any};
-    NotifyStmt: {conditionname: string};
-    ListenStmt: {conditionname: string};
-    UnlistenStmt: {conditionname: string};
-    BitString: {str: string};
-    CoalesceExpr: {args: any[]};
-    ClusterStmt: {relation: any; indexname: string};
-    TableLikeClause: {relation: any; options: Int};
-    WithClause: {ctes: any[]; recursive: boolean};
-    CommonTableExpr: {ctename: string; aliascolnames: any[]; ctequery: any};
-    CreateRangeStmt: {typeName: any[]; params: any[]};
-    DeclareCursorStmt: {portalname: string; options: Int; query: any};
-    FetchStmt: {
-      direction: Int;
-      howMany: Int;
-      portalname: string;
-      ismove: boolean;
-    };
-    LockingClause: {strength: Int; waitPolicy: Int; lockedRels: any[]};
-    CreateAmStmt: {amname: string; handler_name: any[]; amtype: string};
-    CreateCastStmt: {
-      sourcetype: any;
-      targettype: any;
-      context: Int;
-      inout: boolean;
-      func: any;
-    };
-    ReindexStmt: {kind: Int; relation: any; options: Int; name: string};
-    DropOwnedStmt: {roles: any[]; behavior: Int};
-    ReassignOwnedStmt: {roles: any[]; newrole: any};
-    AlterSeqStmt: {sequence: any; options: any[]; missing_ok: boolean};
-    AlterDomainStmt: {
-      subtype: string;
-      typeName: any[];
-      behavior: Int;
-      def: any;
-      name: string;
-      missing_ok: boolean;
-    };
-    PrepareStmt: {name: string; query: any; argtypes: any[]};
-    ExecuteStmt: {name: string; params: any[]};
-    AlterEnumStmt: {
-      typeName: any[];
-      newVal: string;
-      newValIsAfter: boolean;
-      newValNeighbor: string;
-      skipIfNewValExists: boolean;
+      trigname?: string;
+      relation?: AllAstNodes['RangeVar'];
+      funcname?: AstNode[];
+      args?: AstNode[];
+      row?: boolean;
+      timing?: number;
+      events?: number;
+      columns?: AstNode[];
+      whenClause?: AstNode;
+      isconstraint?: boolean;
+      transitionRels?: AstNode[];
+      deferrable?: boolean;
+      initdeferred?: boolean;
+      constrrel?: AllAstNodes['RangeVar'];
     };
     CreateEventTrigStmt: {
-      trigname: string;
-      eventname: string;
-      funcname: any[];
-      whenclause: any[];
+      trigname?: string;
+      eventname?: string;
+      whenclause?: AstNode[];
+      funcname?: AstNode[];
     };
-    AlterEventTrigStmt: {trigname: string; tgenabled: string};
-    CreateUserMappingStmt: {user: any; servername: string; options: any[]};
-    AlterRoleStmt: {role: any; options: any[]; action: Int};
-    AlterPolicyStmt: {policy_name: string; table: any; qual: any};
-    AlterFdwStmt: {fdwname: string; func_options: any[]; options: any[]};
-    AlterForeignServerStmt: {
-      servername: string;
-      version: string;
-      options: any[];
-      has_version: boolean;
+    AlterEventTrigStmt: {
+      trigname?: string;
+      tgenabled?: string;
     };
-    AlterUserMappingStmt: {user: any; servername: string; options: any[]};
-    DropUserMappingStmt: {user: any; servername: string; missing_ok: boolean};
-    CreateForeignTableStmt: {base: any; servername: string; options: any[]};
-    ImportForeignSchemaStmt: {
-      server_name: string;
-      remote_schema: string;
-      local_schema: string;
-      list_type: Int;
-      table_list: any[];
-      options: any[];
+    CreatePLangStmt: {
+      replace?: boolean;
+      plname?: string;
+      plhandler?: AstNode[];
+      plinline?: AstNode[];
+      plvalidator?: AstNode[];
+      pltrusted?: boolean;
     };
-    ConstraintsSetStmt: {deferred: boolean};
-    GroupingFunc: {args: any[]};
-    GroupingSet: {kind: Int; content: any[]};
-    WindowDef: {
-      orderClause: any[];
-      frameOptions: Int;
-      partitionClause: any[];
-      name: string;
-      startOffset: any;
-      endOffset: any;
+    CreateRoleStmt: {
+      stmt_type?: any;
+      role?: string;
+      options?: AstNode[];
     };
-    DiscardStmt: {target: Int};
-    LockStmt: {relations: any[]; mode: Int; nowait: boolean};
-    AlterRoleSetStmt: {role: any; setstmt: any};
-    RefreshMatViewStmt: {relation: any; concurrent: boolean; skipData: boolean};
-    CreateTransformStmt: {
-      type_name: any;
-      lang: string;
-      fromsql: any;
-      tosql: any;
+    AlterRoleStmt: {
+      role?: AllAstNodes['RoleSpec'];
+      options?: AstNode[];
+      action?: number;
     };
-    ClosePortalStmt: {portalname: string};
-    CurrentOfExpr: {cursor_name: string};
-    DeallocateStmt: {name: string};
-    ReplicaIdentityStmt: {identity_type: string; name: string};
-    RangeTableSample: {
-      relation: any;
-      method: any[];
-      args: any[];
-      repeatable: any;
+    AlterRoleSetStmt: {
+      role?: AllAstNodes['RoleSpec'];
+      database?: string;
+      setstmt?: AllAstNodes['VariableSetStmt'];
+    };
+    DropRoleStmt: {
+      roles?: AstNode[];
+      missing_ok?: boolean;
+    };
+    CreateSeqStmt: {
+      sequence?: AllAstNodes['RangeVar'];
+      options?: AstNode[];
+      ownerId?: number;
+      for_identity?: boolean;
+      if_not_exists?: boolean;
+    };
+    AlterSeqStmt: {
+      sequence?: AllAstNodes['RangeVar'];
+      options?: AstNode[];
+      for_identity?: boolean;
+      missing_ok?: boolean;
+    };
+    DefineStmt: {
+      kind?: any;
+      oldstyle?: boolean;
+      defnames?: AstNode[];
+      args?: AstNode[];
+      definition?: AstNode[];
+      if_not_exists?: boolean;
+      replace?: boolean;
+    };
+    CreateDomainStmt: {
+      domainname?: AstNode[];
+      typeName?: AllAstNodes['TypeName'];
+      collClause?: AllAstNodes['CollateClause'];
+      constraints?: AstNode[];
+    };
+    CreateOpClassStmt: {
+      opclassname?: AstNode[];
+      opfamilyname?: AstNode[];
+      amname?: string;
+      datatype?: AllAstNodes['TypeName'];
+      items?: AstNode[];
+      isDefault?: boolean;
+    };
+    CreateOpFamilyStmt: {
+      opfamilyname?: AstNode[];
+      amname?: string;
+    };
+    AlterOpFamilyStmt: {
+      opfamilyname?: AstNode[];
+      amname?: string;
+      isDrop?: boolean;
+      items?: AstNode[];
+    };
+    DropStmt: {
+      objects?: AstNode[];
+      removeType?: any;
+      behavior?: any;
+      missing_ok?: boolean;
+      concurrent?: boolean;
+    };
+    TruncateStmt: {
+      relations?: AstNode[];
+      restart_seqs?: boolean;
+      behavior?: any;
+    };
+    CommentStmt: {
+      objtype?: any;
+      object?: AstNode;
+      comment?: string;
     };
     SecLabelStmt: {
-      objtype: Int;
-      object: any[];
-      label: string;
-      provider: string;
+      objtype?: any;
+      object?: AstNode;
+      provider?: string;
+      label?: string;
     };
-    CopyStmt: {query: any; filename: string};
+    DeclareCursorStmt: {
+      portalname?: string;
+      options?: number;
+      query?: AstNode;
+    };
+    ClosePortalStmt: {
+      portalname?: string;
+    };
+    FetchStmt: {
+      direction?: any;
+      howMany?: number;
+      portalname?: string;
+      ismove?: boolean;
+    };
+    IndexStmt: {
+      idxname?: string;
+      relation?: AllAstNodes['RangeVar'];
+      accessMethod?: string;
+      tableSpace?: string;
+      indexParams?: AstNode[];
+      indexIncludingParams?: AstNode[];
+      options?: AstNode[];
+      whereClause?: AstNode;
+      excludeOpNames?: AstNode[];
+      idxcomment?: string;
+      indexOid?: number;
+      oldNode?: number;
+      oldCreateSubid?: any;
+      oldFirstRelfilenodeSubid?: any;
+      unique?: boolean;
+      primary?: boolean;
+      isconstraint?: boolean;
+      deferrable?: boolean;
+      initdeferred?: boolean;
+      transformed?: boolean;
+      concurrent?: boolean;
+      if_not_exists?: boolean;
+      reset_default_tblspc?: boolean;
+    };
+    CreateStatsStmt: {
+      defnames?: AstNode[];
+      stat_types?: AstNode[];
+      exprs?: AstNode[];
+      relations?: AstNode[];
+      stxcomment?: string;
+      if_not_exists?: boolean;
+    };
+    AlterStatsStmt: {
+      defnames?: AstNode[];
+      stxstattarget?: number;
+      missing_ok?: boolean;
+    };
+    CreateFunctionStmt: {
+      is_procedure?: boolean;
+      replace?: boolean;
+      funcname?: AstNode[];
+      parameters?: AstNode[];
+      returnType?: AllAstNodes['TypeName'];
+      options?: AstNode[];
+    };
+    AlterFunctionStmt: {
+      objtype?: any;
+      func?: AllAstNodes['ObjectWithArgs'];
+      actions?: AstNode[];
+    };
+    DoStmt: {
+      args?: AstNode[];
+    };
+    CallStmt: {
+      funccall?: AllAstNodes['FuncCall'];
+      funcexpr?: AllAstNodes['FuncExpr'];
+    };
+    RenameStmt: {
+      renameType?: any;
+      relationType?: any;
+      relation?: AllAstNodes['RangeVar'];
+      object?: AstNode;
+      subname?: string;
+      newname?: string;
+      behavior?: any;
+      missing_ok?: boolean;
+    };
+    AlterObjectDependsStmt: {
+      objectType?: any;
+      relation?: AllAstNodes['RangeVar'];
+      object?: AstNode;
+      extname?: any;
+      remove?: boolean;
+    };
+    AlterObjectSchemaStmt: {
+      objectType?: any;
+      relation?: AllAstNodes['RangeVar'];
+      object?: AstNode;
+      newschema?: string;
+      missing_ok?: boolean;
+    };
+    AlterOwnerStmt: {
+      objectType?: any;
+      relation?: AllAstNodes['RangeVar'];
+      object?: AstNode;
+      newowner?: AllAstNodes['RoleSpec'];
+    };
+    AlterOperatorStmt: {
+      opername?: AllAstNodes['ObjectWithArgs'];
+      options?: AstNode[];
+    };
+    AlterTypeStmt: {
+      typeName?: AstNode[];
+      options?: AstNode[];
+    };
+    RuleStmt: {
+      relation?: AllAstNodes['RangeVar'];
+      rulename?: string;
+      whereClause?: AstNode;
+      event?: string;
+      instead?: boolean;
+      actions?: AstNode[];
+      replace?: boolean;
+    };
+    NotifyStmt: {
+      conditionname?: string;
+      payload?: string;
+    };
+    ListenStmt: {
+      conditionname?: string;
+    };
+    UnlistenStmt: {
+      conditionname?: string;
+    };
+    TransactionStmt: {
+      kind?: any;
+      options?: AstNode[];
+      savepoint_name?: string;
+      gid?: string;
+      chain?: boolean;
+    };
+    CompositeTypeStmt: {
+      typevar?: AllAstNodes['RangeVar'];
+      coldeflist?: AstNode[];
+    };
+    CreateEnumStmt: {
+      typeName?: AstNode[];
+      vals?: AstNode[];
+    };
+    CreateRangeStmt: {
+      typeName?: AstNode[];
+      params?: AstNode[];
+    };
+    AlterEnumStmt: {
+      typeName?: AstNode[];
+      oldVal?: string;
+      newVal?: string;
+      newValNeighbor?: string;
+      newValIsAfter?: boolean;
+      skipIfNewValExists?: boolean;
+    };
+    ViewStmt: {
+      view?: AllAstNodes['RangeVar'];
+      aliases?: AstNode[];
+      query?: AstNode;
+      replace?: boolean;
+      options?: AstNode[];
+      withCheckOption?: any;
+    };
+    LoadStmt: {
+      filename?: string;
+    };
+    CreatedbStmt: {
+      dbname?: string;
+      options?: AstNode[];
+    };
+    AlterDatabaseStmt: {
+      dbname?: string;
+      options?: AstNode[];
+    };
+    AlterDatabaseSetStmt: {
+      dbname?: string;
+      setstmt?: AllAstNodes['VariableSetStmt'];
+    };
+    DropdbStmt: {
+      dbname?: string;
+      missing_ok?: boolean;
+      options?: AstNode[];
+    };
+    AlterSystemStmt: {
+      setstmt?: AllAstNodes['VariableSetStmt'];
+    };
+    ClusterStmt: {
+      relation?: AllAstNodes['RangeVar'];
+      indexname?: string;
+      options?: number;
+    };
+    VacuumStmt: {
+      options?: AstNode[];
+      rels?: AstNode[];
+      is_vacuumcmd?: boolean;
+    };
+    ExplainStmt: {
+      query?: AstNode;
+      options?: AstNode[];
+    };
+    CreateTableAsStmt: {
+      query?: AstNode;
+      into?: AllAstNodes['IntoClause'];
+      relkind?: any;
+      is_select_into?: boolean;
+      if_not_exists?: boolean;
+    };
+    RefreshMatViewStmt: {
+      concurrent?: boolean;
+      skipData?: boolean;
+      relation?: AllAstNodes['RangeVar'];
+    };
+    CheckPointStmt: {};
+    DiscardStmt: {
+      target?: any;
+    };
+    LockStmt: {
+      relations?: AstNode[];
+      mode?: number;
+      nowait?: boolean;
+    };
+    ConstraintsSetStmt: {
+      constraints?: AstNode[];
+      deferred?: boolean;
+    };
+    ReindexStmt: {
+      kind?: any;
+      relation?: AllAstNodes['RangeVar'];
+      options?: number;
+      concurrent?: boolean;
+    };
+    CreateConversionStmt: {
+      conversion_name?: AstNode[];
+      for_encoding_name?: string;
+      to_encoding_name?: string;
+      func_name?: AstNode[];
+      def?: boolean;
+    };
+    CreateCastStmt: {
+      sourcetype?: AllAstNodes['TypeName'];
+      targettype?: AllAstNodes['TypeName'];
+      func?: AllAstNodes['ObjectWithArgs'];
+      context?: any;
+      inout?: boolean;
+    };
+    CreateTransformStmt: {
+      replace?: boolean;
+      type_name?: AllAstNodes['TypeName'];
+      lang?: string;
+      fromsql?: AllAstNodes['ObjectWithArgs'];
+      tosql?: AllAstNodes['ObjectWithArgs'];
+    };
+    PrepareStmt: {
+      name?: string;
+      argtypes?: AstNode[];
+      query?: AstNode;
+    };
+    ExecuteStmt: {
+      name?: string;
+      params?: AstNode[];
+    };
+    DeallocateStmt: {
+      name?: string;
+    };
+    DropOwnedStmt: {
+      roles?: AstNode[];
+      behavior?: any;
+    };
+    ReassignOwnedStmt: {
+      roles?: AstNode[];
+      newrole?: AllAstNodes['RoleSpec'];
+    };
+    AlterTSDictionaryStmt: {
+      dictname?: AstNode[];
+      options?: AstNode[];
+    };
     AlterTSConfigurationStmt: {
-      kind: Int;
-      cfgname: any[];
-      tokentype: any[];
-      dicts: object[][];
-      override: boolean;
-      replace: boolean;
+      kind?: any;
+      cfgname?: AstNode[];
+      tokentype?: AstNode[];
+      dicts?: AstNode[];
+      override?: boolean;
+      replace?: boolean;
+      missing_ok?: boolean;
     };
-    XmlExpr: {
-      op: Int;
-      args: any[];
-      name: string;
-      xmloption: Int;
-      named_args: any[];
+    CreatePublicationStmt: {
+      pubname?: string;
+      options?: AstNode[];
+      tables?: AstNode[];
+      for_all_tables?: boolean;
     };
-    XmlSerialize: {xmloption: Int; expr: any; typeName: any};
-  };
+    AlterPublicationStmt: {
+      pubname?: string;
+      options?: AstNode[];
+      tables?: AstNode[];
+      for_all_tables?: boolean;
+      tableAction?: any;
+    };
+    CreateSubscriptionStmt: {
+      subname?: string;
+      conninfo?: string;
+      publication?: AstNode[];
+      options?: AstNode[];
+    };
+    AlterSubscriptionStmt: {
+      kind?: any;
+      subname?: string;
+      conninfo?: string;
+      publication?: AstNode[];
+      options?: AstNode[];
+    };
+    DropSubscriptionStmt: {
+      subname?: string;
+      missing_ok?: boolean;
+      behavior?: any;
+    };
+    TypeName: {
+      names?: AstNode[];
+      typeOid?: number;
+      setof?: boolean;
+      pct_type?: boolean;
+      typmods?: AstNode[];
+      typemod?: number;
+      arrayBounds?: AstNode[];
+      location?: number;
+    };
+    ColumnRef: {
+      fields?: AstNode[];
+      location?: number;
+    };
+    ParamRef: {
+      number?: number;
+      location?: number;
+    };
+    A_Expr: {
+      kind?: any;
+      name?: AstNode[];
+      lexpr?: AstNode;
+      rexpr?: AstNode;
+      location?: number;
+    };
+    A_Const: {
+      val?: any;
+      location?: number;
+    };
+    TypeCast: {
+      arg?: AstNode;
+      typeName?: AllAstNodes['TypeName'];
+      location?: number;
+    };
+    CollateClause: {
+      arg?: AstNode;
+      collname?: AstNode[];
+      location?: number;
+    };
+    RoleSpec: {
+      roletype?: any;
+      rolename?: string;
+      location?: number;
+    };
+    FuncCall: {
+      funcname?: AstNode[];
+      args?: AstNode[];
+      agg_order?: AstNode[];
+      agg_filter?: AstNode;
+      agg_within_group?: boolean;
+      agg_star?: boolean;
+      agg_distinct?: boolean;
+      func_variadic?: boolean;
+      over?: AllAstNodes['WindowDef'];
+      location?: number;
+    };
+    A_Star: {};
+    A_Indices: {
+      is_slice?: boolean;
+      lidx?: AstNode;
+      uidx?: AstNode;
+    };
+    A_Indirection: {
+      arg?: AstNode;
+      indirection?: AstNode[];
+    };
+    A_ArrayExpr: {
+      elements?: AstNode[];
+      location?: number;
+    };
+    ResTarget: {
+      name?: string;
+      indirection?: AstNode[];
+      val?: AstNode;
+      location?: number;
+    };
+    MultiAssignRef: {
+      source?: AstNode;
+      colno?: number;
+      ncolumns?: number;
+    };
+    SortBy: {
+      node?: AstNode;
+      sortby_dir?: any;
+      sortby_nulls?: any;
+      useOp?: AstNode[];
+      location?: number;
+    };
+    WindowDef: {
+      name?: string;
+      refname?: string;
+      partitionClause?: AstNode[];
+      orderClause?: AstNode[];
+      frameOptions?: number;
+      startOffset?: AstNode;
+      endOffset?: AstNode;
+      location?: number;
+    };
+    RangeSubselect: {
+      lateral?: boolean;
+      subquery?: AstNode;
+      alias?: AllAstNodes['Alias'];
+    };
+    RangeFunction: {
+      lateral?: boolean;
+      ordinality?: boolean;
+      is_rowsfrom?: boolean;
+      functions?: AstNode[];
+      alias?: AllAstNodes['Alias'];
+      coldeflist?: AstNode[];
+    };
+    RangeTableFunc: {
+      lateral?: boolean;
+      docexpr?: AstNode;
+      rowexpr?: AstNode;
+      namespaces?: AstNode[];
+      columns?: AstNode[];
+      alias?: AllAstNodes['Alias'];
+      location?: number;
+    };
+    RangeTableFuncCol: {
+      colname?: string;
+      typeName?: AllAstNodes['TypeName'];
+      for_ordinality?: boolean;
+      is_not_null?: boolean;
+      colexpr?: AstNode;
+      coldefexpr?: AstNode;
+      location?: number;
+    };
+    RangeTableSample: {
+      relation?: AstNode;
+      method?: AstNode[];
+      args?: AstNode[];
+      repeatable?: AstNode;
+      location?: number;
+    };
+    ColumnDef: {
+      colname?: string;
+      typeName?: AllAstNodes['TypeName'];
+      inhcount?: number;
+      is_local?: boolean;
+      is_not_null?: boolean;
+      is_from_type?: boolean;
+      storage?: string;
+      raw_default?: AstNode;
+      cooked_default?: AstNode;
+      identity?: string;
+      identitySequence?: AllAstNodes['RangeVar'];
+      generated?: string;
+      collClause?: AllAstNodes['CollateClause'];
+      collOid?: number;
+      constraints?: AstNode[];
+      fdwoptions?: AstNode[];
+      location?: number;
+    };
+    TableLikeClause: {
+      relation?: AllAstNodes['RangeVar'];
+      options?: any;
+      relationOid?: number;
+    };
+    IndexElem: {
+      name?: string;
+      expr?: AstNode;
+      indexcolname?: string;
+      collation?: AstNode[];
+      opclass?: AstNode[];
+      opclassopts?: AstNode[];
+      ordering?: any;
+      nulls_ordering?: any;
+    };
+    DefElem: {
+      defnamespace?: string;
+      defname?: string;
+      arg?: AstNode;
+      defaction?: any;
+      location?: number;
+    };
+    LockingClause: {
+      lockedRels?: AstNode[];
+      strength?: any;
+      waitPolicy?: any;
+    };
+    XmlSerialize: {
+      xmloption?: any;
+      expr?: AstNode;
+      typeName?: AllAstNodes['TypeName'];
+      location?: number;
+    };
+    PartitionElem: {
+      name?: string;
+      expr?: AstNode;
+      collation?: AstNode[];
+      opclass?: AstNode[];
+      location?: number;
+    };
+    PartitionSpec: {
+      strategy?: string;
+      partParams?: AstNode[];
+      location?: number;
+    };
+    PartitionRangeDatum: {
+      kind?: any;
+      value?: AstNode;
+      location?: number;
+    };
+    PartitionCmd: {
+      name?: AllAstNodes['RangeVar'];
+      bound?: any;
+    };
+    RangeTblEntry: {
+      rtekind?: any;
+      relid?: number;
+      relkind?: string;
+      rellockmode?: number;
+      tablesample?: AllAstNodes['TableSampleClause'];
+      subquery?: any;
+      security_barrier?: boolean;
+      jointype?: any;
+      joinmergedcols?: number;
+      joinaliasvars?: AstNode[];
+      joinleftcols?: AstNode[];
+      joinrightcols?: AstNode[];
+      functions?: AstNode[];
+      funcordinality?: boolean;
+      tablefunc?: AllAstNodes['TableFunc'];
+      values_lists?: AstNode[];
+      ctename?: string;
+      ctelevelsup?: any;
+      self_reference?: boolean;
+      coltypes?: AstNode[];
+      coltypmods?: AstNode[];
+      colcollations?: AstNode[];
+      enrname?: string;
+      enrtuples?: any;
+      alias?: AllAstNodes['Alias'];
+      eref?: AllAstNodes['Alias'];
+      lateral?: boolean;
+      inh?: boolean;
+      inFromCl?: boolean;
+      requiredPerms?: any;
+      checkAsUser?: number;
+      selectedCols?: any;
+      insertedCols?: any;
+      updatedCols?: any;
+      extraUpdatedCols?: any;
+      securityQuals?: AstNode[];
+    };
+    RangeTblFunction: {
+      funcexpr?: AstNode;
+      funccolcount?: number;
+      funccolnames?: AstNode[];
+      funccoltypes?: AstNode[];
+      funccoltypmods?: AstNode[];
+      funccolcollations?: AstNode[];
+      funcparams?: any;
+    };
+    TableSampleClause: {
+      tsmhandler?: number;
+      args?: AstNode[];
+      repeatable?: any;
+    };
+    WithCheckOption: {
+      kind?: any;
+      relname?: string;
+      polname?: string;
+      qual?: AstNode;
+      cascaded?: boolean;
+    };
+    SortGroupClause: {
+      tleSortGroupRef?: any;
+      eqop?: number;
+      sortop?: number;
+      nulls_first?: boolean;
+      hashable?: boolean;
+    };
+    GroupingSet: {
+      kind?: any;
+      content?: AstNode[];
+      location?: number;
+    };
+    WindowClause: {
+      name?: string;
+      refname?: string;
+      partitionClause?: AstNode[];
+      orderClause?: AstNode[];
+      frameOptions?: number;
+      startOffset?: AstNode;
+      endOffset?: AstNode;
+      startInRangeFunc?: number;
+      endInRangeFunc?: number;
+      inRangeColl?: number;
+      inRangeAsc?: boolean;
+      inRangeNullsFirst?: boolean;
+      winref?: any;
+      copiedOrder?: boolean;
+    };
+    RowMarkClause: {
+      rti?: any;
+      strength?: any;
+      waitPolicy?: any;
+      pushedDown?: boolean;
+    };
+    WithClause: {
+      ctes?: AstNode[];
+      recursive?: boolean;
+      location?: number;
+    };
+    InferClause: {
+      indexElems?: AstNode[];
+      whereClause?: AstNode;
+      conname?: string;
+      location?: number;
+    };
+    OnConflictClause: {
+      action?: any;
+      infer?: AllAstNodes['InferClause'];
+      targetList?: AstNode[];
+      whereClause?: AstNode;
+      location?: number;
+    };
+    CommonTableExpr: {
+      ctename?: string;
+      aliascolnames?: AstNode[];
+      ctematerialized?: any;
+      ctequery?: AstNode;
+      location?: number;
+      cterecursive?: boolean;
+      cterefcount?: number;
+      ctecolnames?: AstNode[];
+      ctecoltypes?: AstNode[];
+      ctecoltypmods?: AstNode[];
+      ctecolcollations?: AstNode[];
+    };
+    TriggerTransition: {
+      name?: string;
+      isNew?: boolean;
+      isTable?: boolean;
+    };
+    AlterTableCmd: {
+      subtype?: any;
+      name?: string;
+      num?: number;
+      newowner?: AllAstNodes['RoleSpec'];
+      def?: AstNode;
+      behavior?: any;
+      missing_ok?: boolean;
+      recurse?: boolean;
+    };
+    ObjectWithArgs: {
+      objname?: AstNode[];
+      objargs?: AstNode[];
+      args_unspecified?: boolean;
+    };
+    AccessPriv: {
+      priv_name?: string;
+      cols?: AstNode[];
+    };
+    Constraint: {
+      contype?: any;
+      conname?: string;
+      deferrable?: boolean;
+      initdeferred?: boolean;
+      location?: number;
+      is_no_inherit?: boolean;
+      raw_expr?: AstNode;
+      cooked_expr?: string;
+      generated_when?: string;
+      keys?: AstNode[];
+      including?: AstNode[];
+      exclusions?: AstNode[];
+      options?: AstNode[];
+      indexname?: string;
+      indexspace?: string;
+      reset_default_tblspc?: boolean;
+      access_method?: string;
+      where_clause?: AstNode;
+      pktable?: AllAstNodes['RangeVar'];
+      fk_attrs?: AstNode[];
+      pk_attrs?: AstNode[];
+      fk_matchtype?: string;
+      fk_upd_action?: string;
+      fk_del_action?: string;
+      old_conpfeqop?: AstNode[];
+      old_pktable_oid?: number;
+      skip_validation?: boolean;
+      initially_valid?: boolean;
+    };
+    CreateOpClassItem: {
+      itemtype?: number;
+      name?: AllAstNodes['ObjectWithArgs'];
+      number?: number;
+      order_family?: AstNode[];
+      class_args?: AstNode[];
+      storedtype?: AllAstNodes['TypeName'];
+    };
+    FunctionParameter: {
+      name?: string;
+      argType?: AllAstNodes['TypeName'];
+      mode?: any;
+      defexpr?: AstNode;
+    };
+    InlineCodeBlock: {
+      source_text?: string;
+      langOid?: number;
+      langIsTrusted?: boolean;
+      atomic?: boolean;
+    };
+    CallContext: {
+      atomic?: boolean;
+    };
+    VacuumRelation: {
+      relation?: AllAstNodes['RangeVar'];
+      oid?: number;
+      va_cols?: AstNode[];
+    };
+    String: {
+      ival?: number;
+      str?: string;
+    };
+    Integer: {
+      ival?: number;
+      str?: string;
+    };
+    Float: {
+      ival?: number;
+      str?: string;
+    };
+    Null: {
+      ival?: number;
+      str?: string;
+    };
+    BitString: {
+      ival?: number;
+      str?: string;
+    };
+    Alias: {
+      aliasname?: string;
+      colnames?: AstNode[];
+    };
+    RangeVar: {
+      catalogname?: string;
+      schemaname?: string;
+      relname?: string;
+      inh?: boolean;
+      relpersistence?: string;
+      alias?: AllAstNodes['Alias'];
+      location?: number;
+    };
+    TableFunc: {
+      ns_uris?: AstNode[];
+      ns_names?: AstNode[];
+      docexpr?: AstNode;
+      rowexpr?: AstNode;
+      colnames?: AstNode[];
+      coltypes?: AstNode[];
+      coltypmods?: AstNode[];
+      colcollations?: AstNode[];
+      colexprs?: AstNode[];
+      coldefexprs?: AstNode[];
+      notnulls?: any;
+      ordinalitycol?: number;
+      location?: number;
+    };
+    IntoClause: {
+      rel?: AllAstNodes['RangeVar'];
+      colNames?: AstNode[];
+      accessMethod?: string;
+      options?: AstNode[];
+      onCommit?: any;
+      tableSpaceName?: string;
+      viewQuery?: AstNode;
+      skipData?: boolean;
+    };
+    FuncExpr: {
+      xpr?: any;
+      funcid?: number;
+      funcresulttype?: number;
+      funcretset?: boolean;
+      funcvariadic?: boolean;
+      funcformat?: any;
+      funccollid?: number;
+      inputcollid?: number;
+      args?: AstNode[];
+      location?: number;
+    };
+  }
 
   export const AST_TYPES: AstNodeTypeName[] = [
-    'CreateSchemaStmt',
-    'CreateStmt',
-    'RangeVar',
-    'ColumnDef',
-    'TypeName',
-    'String',
-    'Constraint',
-    'A_Const',
-    'Integer',
-    'AlterTableStmt',
-    'AlterTableCmd',
-    'SQLValueFunction',
-    'RenameStmt',
-    'A_Expr',
-    'TypeCast',
-    'ColumnRef',
-    'FuncCall',
-    'AlterDefaultPrivilegesStmt',
-    'DefElem',
-    'GrantStmt',
-    'AccessPriv',
-    'RoleSpec',
-    'CommentStmt',
-    'ObjectWithArgs',
+    'RawStmt',
+    'InsertStmt',
+    'DeleteStmt',
+    'UpdateStmt',
     'SelectStmt',
-    'ResTarget',
-    'Alias',
-    'JoinExpr',
-    'BoolExpr',
-    'A_Star',
-    'SortBy',
-    'NamedArgExpr',
-    'A_ArrayExpr',
-    'Float',
-    'RangeFunction',
-    'SubLink',
-    'Null',
+    'SetOperationStmt',
+    'CreateSchemaStmt',
+    'AlterTableStmt',
+    'ReplicaIdentityStmt',
+    'AlterCollationStmt',
+    'AlterDomainStmt',
+    'GrantStmt',
+    'GrantRoleStmt',
+    'AlterDefaultPrivilegesStmt',
+    'CopyStmt',
     'VariableSetStmt',
     'VariableShowStmt',
-    'DoStmt',
-    'CreateDomainStmt',
-    'CreateEnumStmt',
+    'CreateStmt',
+    'CreateTableSpaceStmt',
+    'DropTableSpaceStmt',
+    'AlterTableSpaceOptionsStmt',
+    'AlterTableMoveAllStmt',
     'CreateExtensionStmt',
-    'CreateFunctionStmt',
-    'FunctionParameter',
-    'TransactionStmt',
-    'IndexStmt',
-    'IndexElem',
-    'NullTest',
-    'ParamRef',
-    'CreatePolicyStmt',
-    'RangeSubselect',
-    'A_Indirection',
-    'RowExpr',
-    'CreateRoleStmt',
-    'GrantRoleStmt',
-    'RuleStmt',
-    'UpdateStmt',
-    'DeleteStmt',
-    'InsertStmt',
-    'CreateSeqStmt',
-    'OnConflictClause',
-    'InferClause',
-    'MultiAssignRef',
-    'SetToDefault',
-    'MinMaxExpr',
-    'DropStmt',
-    'CreateTrigStmt',
-    'CompositeTypeStmt',
-    'ExplainStmt',
-    'ViewStmt',
-    'CollateClause',
-    'DefineStmt',
-    'DropRoleStmt',
-    'AlterOwnerStmt',
-    'AlterObjectSchemaStmt',
-    'CreateConversionStmt',
+    'AlterExtensionStmt',
+    'AlterExtensionContentsStmt',
     'CreateFdwStmt',
+    'AlterFdwStmt',
     'CreateForeignServerStmt',
+    'AlterForeignServerStmt',
+    'CreateForeignTableStmt',
+    'CreateUserMappingStmt',
+    'AlterUserMappingStmt',
+    'DropUserMappingStmt',
+    'ImportForeignSchemaStmt',
+    'CreatePolicyStmt',
+    'AlterPolicyStmt',
+    'CreateAmStmt',
+    'CreateTrigStmt',
+    'CreateEventTrigStmt',
+    'AlterEventTrigStmt',
     'CreatePLangStmt',
-    'CreateOpFamilyStmt',
+    'CreateRoleStmt',
+    'AlterRoleStmt',
+    'AlterRoleSetStmt',
+    'DropRoleStmt',
+    'CreateSeqStmt',
+    'AlterSeqStmt',
+    'DefineStmt',
+    'CreateDomainStmt',
     'CreateOpClassStmt',
-    'CreateOpClassItem',
+    'CreateOpFamilyStmt',
     'AlterOpFamilyStmt',
-    'AlterOperatorStmt',
-    'VacuumStmt',
-    'CreateTableAsStmt',
-    'IntoClause',
-    'CaseExpr',
-    'CaseWhen',
-    'BooleanTest',
-    'AlterFunctionStmt',
+    'DropStmt',
     'TruncateStmt',
-    'A_Indices',
+    'CommentStmt',
+    'SecLabelStmt',
+    'DeclareCursorStmt',
+    'ClosePortalStmt',
+    'FetchStmt',
+    'IndexStmt',
+    'CreateStatsStmt',
+    'AlterStatsStmt',
+    'CreateFunctionStmt',
+    'AlterFunctionStmt',
+    'DoStmt',
+    'CallStmt',
+    'RenameStmt',
+    'AlterObjectDependsStmt',
+    'AlterObjectSchemaStmt',
+    'AlterOwnerStmt',
+    'AlterOperatorStmt',
+    'AlterTypeStmt',
+    'RuleStmt',
     'NotifyStmt',
     'ListenStmt',
     'UnlistenStmt',
-    'BitString',
-    'CoalesceExpr',
-    'ClusterStmt',
-    'TableLikeClause',
-    'WithClause',
-    'CommonTableExpr',
+    'TransactionStmt',
+    'CompositeTypeStmt',
+    'CreateEnumStmt',
     'CreateRangeStmt',
-    'DeclareCursorStmt',
-    'FetchStmt',
-    'LockingClause',
-    'CreateAmStmt',
-    'CreateCastStmt',
-    'ReindexStmt',
-    'DropOwnedStmt',
-    'ReassignOwnedStmt',
-    'AlterSeqStmt',
-    'AlterDomainStmt',
-    'PrepareStmt',
-    'ExecuteStmt',
     'AlterEnumStmt',
-    'CreateEventTrigStmt',
-    'AlterEventTrigStmt',
-    'CreateUserMappingStmt',
-    'AlterRoleStmt',
-    'AlterPolicyStmt',
-    'AlterFdwStmt',
-    'AlterForeignServerStmt',
-    'AlterUserMappingStmt',
-    'DropUserMappingStmt',
-    'CreateForeignTableStmt',
-    'ImportForeignSchemaStmt',
-    'ConstraintsSetStmt',
-    'GroupingFunc',
-    'GroupingSet',
-    'WindowDef',
+    'ViewStmt',
+    'LoadStmt',
+    'CreatedbStmt',
+    'AlterDatabaseStmt',
+    'AlterDatabaseSetStmt',
+    'DropdbStmt',
+    'AlterSystemStmt',
+    'ClusterStmt',
+    'VacuumStmt',
+    'ExplainStmt',
+    'CreateTableAsStmt',
+    'RefreshMatViewStmt',
+    'CheckPointStmt',
     'DiscardStmt',
     'LockStmt',
-    'AlterRoleSetStmt',
-    'RefreshMatViewStmt',
+    'ConstraintsSetStmt',
+    'ReindexStmt',
+    'CreateConversionStmt',
+    'CreateCastStmt',
     'CreateTransformStmt',
-    'ClosePortalStmt',
-    'CurrentOfExpr',
+    'PrepareStmt',
+    'ExecuteStmt',
     'DeallocateStmt',
-    'ReplicaIdentityStmt',
-    'RangeTableSample',
-    'SecLabelStmt',
-    'CopyStmt',
+    'DropOwnedStmt',
+    'ReassignOwnedStmt',
+    'AlterTSDictionaryStmt',
     'AlterTSConfigurationStmt',
-    'XmlExpr',
-    'XmlSerialize'
+    'CreatePublicationStmt',
+    'AlterPublicationStmt',
+    'CreateSubscriptionStmt',
+    'AlterSubscriptionStmt',
+    'DropSubscriptionStmt',
+    'TypeName',
+    'ColumnRef',
+    'ParamRef',
+    'A_Expr',
+    'A_Const',
+    'TypeCast',
+    'CollateClause',
+    'RoleSpec',
+    'FuncCall',
+    'A_Star',
+    'A_Indices',
+    'A_Indirection',
+    'A_ArrayExpr',
+    'ResTarget',
+    'MultiAssignRef',
+    'SortBy',
+    'WindowDef',
+    'RangeSubselect',
+    'RangeFunction',
+    'RangeTableFunc',
+    'RangeTableFuncCol',
+    'RangeTableSample',
+    'ColumnDef',
+    'TableLikeClause',
+    'IndexElem',
+    'DefElem',
+    'LockingClause',
+    'XmlSerialize',
+    'PartitionElem',
+    'PartitionSpec',
+    'PartitionRangeDatum',
+    'PartitionCmd',
+    'RangeTblEntry',
+    'RangeTblFunction',
+    'TableSampleClause',
+    'WithCheckOption',
+    'SortGroupClause',
+    'GroupingSet',
+    'WindowClause',
+    'RowMarkClause',
+    'WithClause',
+    'InferClause',
+    'OnConflictClause',
+    'CommonTableExpr',
+    'TriggerTransition',
+    'AlterTableCmd',
+    'ObjectWithArgs',
+    'AccessPriv',
+    'Constraint',
+    'CreateOpClassItem',
+    'FunctionParameter',
+    'InlineCodeBlock',
+    'CallContext',
+    'VacuumRelation',
+    'String',
+    'Integer',
+    'Float',
+    'Null',
+    'BitString',
+    'Alias',
+    'RangeVar',
+    'TableFunc',
+    'IntoClause',
+    'FuncExpr'
   ];
 }

@@ -1,7 +1,7 @@
 import assert from 'assert';
 import * as pgsql from 'pgsql-parser';
 import {normalize} from '../src';
-import {PgAst, traverse, _isNodeType} from '../src/ast';
+import {traverse, _isNodeType} from '../src/ast';
 import {stmtTypeExamples} from './data';
 describe('pgsql-parser and ast interact as expected', () => {
   it('traverse yields valid nodes', () => {
@@ -21,8 +21,8 @@ describe('pgsql-parser and ast interact as expected', () => {
     const columnsRefd = [] as string[];
     for (let n of traverse(parsed[0].RawStmt)) {
       if (n.type === 'ColumnRef') {
-        assert(n.node.fields.length === 1);
-        const col = n.node.fields[0].String.str;
+        assert(n.node?.fields?.length === 1);
+        const col = n.node?.fields?.[0]?.String?.str;
         assert(col);
         columnsRefd.push(col);
       }
@@ -37,9 +37,10 @@ describe('pgsql-parser and ast interact as expected', () => {
     const parsed = pgsql.parse(q);
     for (let n of traverse(parsed[0].RawStmt)) {
       if (n.type === 'ColumnRef') {
-        const col = n.node.fields[0].String.str;
-        if (col === 'a') {
-          n.node.fields[0].String.str = 'z';
+        const node = n.node?.fields?.[0]?.String;
+        assert(node);
+        if (node.str === 'a') {
+          node.str = 'z';
         }
       }
     }

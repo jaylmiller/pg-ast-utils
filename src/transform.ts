@@ -108,9 +108,9 @@ function _addCountColNodeHandler(
       val: createNode('FuncCall', {
         funcname: [createNode('String', {str: 'count'})],
         agg_star: true,
-        over: createNode('WindowDef', {
+        over: {
           frameOptions: 1058
-        })
+        }
       })
     })
   ];
@@ -149,7 +149,8 @@ function _moveRootSelectToCTE(node: PgAst.Statement, cteName: string) {
           cte
         )})`
       );
-      ctesForNewQuery.push(cte);
+      // ctesForNewQuery.push({CommonTableExpr: {} })
+      ctesForNewQuery.push(cte as PgAst.TypeToAstNode<'CommonTableExpr'>);
     }
   }
   // create a CTE from original base query
