@@ -1,5 +1,4 @@
 import assert from 'assert';
-import {createHash} from 'crypto';
 import * as pgsql from 'pgsql-parser';
 import {PgAst, traverse} from './ast';
 /**

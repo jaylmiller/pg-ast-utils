@@ -56,7 +56,6 @@ export function _isNodeType(v: string): v is PgAst.AstNodeTypeName {
 }
 
 export namespace PgAst {
-  type Int = number; // & {__int__: void};
   export interface Statement {
     RawStmt: RawStmt;
   }
@@ -77,7 +76,7 @@ export namespace PgAst {
         ? K
         : never]?: Partial<AllAstNodes[K]>;
     };
-    stmt_len?: Int;
+    stmt_len?: number;
   }
   export function getNodeType(n: any) {
     const ks = Object.keys(n);

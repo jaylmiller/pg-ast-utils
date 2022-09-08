@@ -9,7 +9,6 @@ found = re.findall(r'/\*.*?\*/', 'AlterTableCmd\t/* one subcommand of an ALTER T
 CmdType = "CmdType"
 Oid = "Oid"
 
-# hardcode value nodes
 
 def get_struct_lines(fname: str, sourcelink: str):
     if not os.path.exists(fname):
@@ -38,6 +37,7 @@ class _parseditem:
     prop: str
     handled: bool
 
+# hardcode value nodes
 values = {
     t: [_parseditem("number", "ival", True),_parseditem("string", "str", True) ] 
     for t in ["String", "Integer", "Float", "Null", "BitString"]
