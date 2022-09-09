@@ -15,7 +15,21 @@ const _stmtTypeExamples: {
   TransactionStmt: 'begin; commit; rollback',
   CreateSchemaStmt: 'create schema if not exists t',
   CreateRoleStmt: 'create role a with superuser login',
-  IndexStmt: 'create index ON a(b); create index on a using hash(b)'
+  IndexStmt: 'create index ON a(b); create index on a using hash(b)',
+  VariableShowStmt: 'SHOW ALL',
+  VariableSetStmt: `set SHARED_BUFFERS = '128GB'`,
+  CreateFunctionStmt: `
+    CREATE OR REPLACE FUNCTION testy()
+    RETURNS TABLE (i int)
+    LANGUAGE plpgsql
+    AS
+    $$
+    BEGIN
+      RETURN QUERY
+          SELECT 1;
+      END
+    $$;
+  `
 };
 
 export const stmtTypeExamples = Object.entries(_stmtTypeExamples).map(
