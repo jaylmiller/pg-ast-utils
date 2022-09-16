@@ -2,7 +2,7 @@
 	"author": "Jay Miller",
 	"license": "MIT",
 	"name": "pg-ast-utils",
-	"version": "1.0.1",
+	"version": "1.5.0",
 	"main": "dist/index.js",
 	"types": "dist/index.d.ts",
 	"scripts": {
