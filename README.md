@@ -189,10 +189,6 @@ console.log(queryCacheKey(q1) ==== queryCacheKey(q2));
 
 ## TODO
 
-- better typing (atm, lots of `any` and `any[]` used in the AST ndoe types)
-- common analysis funcs
-  - get columns queried
-  - get functions used
 - transform funcs
   - rewrite tables queried from using a mapping
 - run tests in github actions
