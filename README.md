@@ -53,10 +53,6 @@ Traversing the AST yields objects with the shape
 where `type` is the name of the type of node it is and `node` contains the actual data
 within the node.
 
-**The typings for the AST nodes are a work in progress and still contain
-alot `any` for some fields who's types i could not auto-generate from `parsenodes.h`,
-but, for each node type, the properties define account for every possible field in that node type**.
-
 AST typings are defined in the namespace `PgAst` (in `src/ast.ts`).
 
 Objects in the `node` field are references to the AST, so you can modify the AST
